@@ -6,7 +6,7 @@ import UIKit
 import BraveRewards
 
 class TipsDetailViewController: UIViewController {
-  private var ledgerObs: LedgerObserver
+  private var ledgerObserver: LedgerObserver
   private var tipsView: View {
     return view as! View // swiftlint:disable:this force_cast
   }
@@ -17,13 +17,10 @@ class TipsDetailViewController: UIViewController {
 
   init(state: RewardsState) {
     self.state = state
-    ledgerObs = LedgerObserver(ledger: state.ledger)
-    state.ledger.add(ledgerObs)
+    ledgerObserver = LedgerObserver(ledger: state.ledger)
+    state.ledger.add(ledgerObserver)
     super.init(nibName: nil, bundle: nil)
-  }
-  
-  deinit {
-    state.ledger.remove(ledgerObs)
+    setupLedgerObservers()
   }
   
   @available(*, unavailable)
@@ -37,7 +34,7 @@ class TipsDetailViewController: UIViewController {
   
   override func viewDidLoad() {
     super.viewDidLoad()
-    setObservers()
+    setupLedgerObservers()
     navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .edit, target: self, action: #selector(tappedEditButton))
     
     tipsView.tableView.delegate = self
@@ -287,8 +284,11 @@ extension TipsDetailViewController {
     }
   }
   
-  func setObservers() {
-    ledgerObs.recurringTipRemoved = { key in
+  func setupLedgerObservers() {
+    ledgerObserver.recurringTipRemoved = { [weak self] key in
+      guard let self = self, self.isViewLoaded else {
+        return
+      }
       let tableView = self.tipsView.tableView
       let oldCount = self.tipsList.count
       self.tipsList.removeAll(where: {

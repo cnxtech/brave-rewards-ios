@@ -6,7 +6,7 @@ import UIKit
 import BraveRewards
 
 class AutoContributeDetailViewController: UIViewController {
-  private var ledgerObs: LedgerObserver
+  private var ledgerObserver: LedgerObserver
   private var contentView: View {
     return view as! View // swiftlint:disable:this force_cast
   }
@@ -19,9 +19,10 @@ class AutoContributeDetailViewController: UIViewController {
   
   init(state: RewardsState) {
     self.state = state
-    ledgerObs = LedgerObserver(ledger: state.ledger)
-    state.ledger.add(ledgerObs)
+    ledgerObserver = LedgerObserver(ledger: state.ledger)
+    state.ledger.add(ledgerObserver)
     super.init(nibName: nil, bundle: nil)
+    setupLedgerObservers()
   }
   
   @available(*, unavailable)
@@ -33,13 +34,8 @@ class AutoContributeDetailViewController: UIViewController {
     self.view = View()
   }
   
-  deinit {
-    state.ledger.remove(ledgerObs)
-  }
-  
   override func viewDidLoad() {
     super.viewDidLoad()
-    setObservers()
     contentView.tableView.delegate = self
     contentView.tableView.dataSource = self
     
@@ -389,8 +385,11 @@ extension AutoContributeDetailViewController {
 
 /// Ledger Observers
 extension AutoContributeDetailViewController {
-  func setObservers() {
-    ledgerObs.excludedSitesChanged = { key, exclude -> Void in
+  func setupLedgerObservers() {
+    ledgerObserver.excludedSitesChanged = { [weak self] key, exclude -> Void in
+      guard let self = self, self.isViewLoaded else {
+        return
+      }
       let tableView = self.contentView.tableView
       switch exclude {
       case .all:

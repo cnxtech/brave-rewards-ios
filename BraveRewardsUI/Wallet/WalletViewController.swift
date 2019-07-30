@@ -12,16 +12,17 @@ protocol WalletContentView: AnyObject {
 }
 
 class WalletViewController: UIViewController, RewardsSummaryProtocol {
-  private var ledgerObs: LedgerObserver
+  private var ledgerObserver: LedgerObserver
   let state: RewardsState
   weak var currentNotification: RewardsNotification?
   private var recurringTipAmount: Double = 0.0
   
   init(state: RewardsState) {
     self.state = state
-    ledgerObs = LedgerObserver(ledger: state.ledger)
-    state.ledger.add(ledgerObs)
+    ledgerObserver = LedgerObserver(ledger: state.ledger)
+    state.ledger.add(ledgerObserver)
     super.init(nibName: nil, bundle: nil)
+    setupLedgerObservers()
   }
   
   @available(*, unavailable)
@@ -43,7 +44,6 @@ class WalletViewController: UIViewController, RewardsSummaryProtocol {
   
   override func viewDidLoad() {
     super.viewDidLoad()
-    setObservers()
     // Not actually visible from this controller
     title = Strings.PanelTitle
     
@@ -96,7 +96,6 @@ class WalletViewController: UIViewController, RewardsSummaryProtocol {
   
   deinit {
     NotificationCenter.default.removeObserver(self)
-    state.ledger.remove(ledgerObs)
   }
   
   override func viewDidLayoutSubviews() {
@@ -469,8 +468,11 @@ extension WalletViewController {
     }
   }
   
-  func setObservers() {
-    ledgerObs.balanceReportUpdated = {
+  func setupLedgerObservers() {
+    ledgerObserver.balanceReportUpdated = { [weak self] in
+      guard let self = self, self.isViewLoaded else {
+        return
+      }
       let rows = self.summaryRows.map({ row -> RowView in
         row.isHidden = true
         return row
