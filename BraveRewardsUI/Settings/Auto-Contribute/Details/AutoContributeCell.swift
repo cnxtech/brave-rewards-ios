@@ -48,6 +48,8 @@ class AutoContributeCell: UITableViewCell, TableViewReusable {
     siteStackView.addArrangedSubview(siteImageView)
     siteStackView.addArrangedSubview(siteNameLabel)
     
+    siteImageView.snp.removeConstraints()
+    
     siteStackView.snp.makeConstraints {
       $0.top.bottom.equalTo(contentView).inset(10.0)
       $0.leading.equalTo(contentView).inset(15.0)

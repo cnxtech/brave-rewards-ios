@@ -25,7 +25,7 @@ enum PublisherMediaType: String {
 }
 
 class TippingViewController: UIViewController, UIViewControllerTransitioningDelegate {
-  
+  private var ledgerObs: LedgerObserver
   let state: RewardsState
   let publisherInfo: PublisherInfo
   static let defaultTippingAmounts = [1.0, 5.0, 10.0]
@@ -33,11 +33,16 @@ class TippingViewController: UIViewController, UIViewControllerTransitioningDele
   init(state: RewardsState, publisherInfo: PublisherInfo) {
     self.state = state
     self.publisherInfo = publisherInfo
-    
+    ledgerObs = LedgerObserver(ledger: state.ledger)
+    state.ledger.add(ledgerObs)
     super.init(nibName: nil, bundle: nil)
     
     modalPresentationStyle = .overFullScreen
     transitioningDelegate = self
+  }
+  
+  deinit {
+    state.ledger.remove(ledgerObs)
   }
   
   @available(*, unavailable)
@@ -55,7 +60,7 @@ class TippingViewController: UIViewController, UIViewControllerTransitioningDele
   
   override func viewDidLoad() {
     super.viewDidLoad()
-    
+    setObservers()
     // Not actually visible, but good for accessibility
     title = Strings.TippingTitle
     
@@ -165,29 +170,31 @@ class TippingViewController: UIViewController, UIViewControllerTransitioningDele
       } else {
         self.state.ledger.tipPublisherDirectly(self.publisherInfo, amount: Int32(amount), currency: "BAT")
       }
+    }
+  }
+  
+  func displayConfirmation(amount: Double) {
+    let displayConfirmationView = { (recurringDate: String?) in
+      let provider = " \(self.publisherInfo.provider.isEmpty ? "" : String(format: Strings.OnProviderText, self.publisherInfo.provider))"
       
-      let displayConfirmationView = { (recurringDate: String?) in
-        let provider = " \(self.publisherInfo.provider.isEmpty ? "" : String(format: Strings.OnProviderText, self.publisherInfo.provider))"
-        
-        self.tippingView.updateConfirmationInfo(name: "\(self.publisherInfo.name)\(provider)", tipAmount: amount, recurringDate: recurringDate)
-        self.tippingView.setTippingConfirmationVisible(true, animated: true)
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-          self.dismiss(animated: true)
-        }
+      self.tippingView.updateConfirmationInfo(name: "\(self.publisherInfo.name)\(provider)", tipAmount: amount, recurringDate: recurringDate)
+      self.tippingView.setTippingConfirmationVisible(true, animated: true)
+      
+      DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+        self.dismiss(animated: true)
       }
-      
-      if self.tippingView.optionSelectionView.isMonthly {
-        let date = Date(timeIntervalSince1970: TimeInterval(self.state.ledger.autoContributeProps.reconcileStamp))
-        let dateString = DateFormatter().then {
-          $0.dateStyle = .short
-          $0.timeStyle = .none
+    }
+    
+    if self.tippingView.optionSelectionView.isMonthly {
+      let date = Date(timeIntervalSince1970: TimeInterval(self.state.ledger.autoContributeProps.reconcileStamp))
+      let dateString = DateFormatter().then {
+        $0.dateStyle = .short
+        $0.timeStyle = .none
         }.string(from: date)
-        
-        displayConfirmationView(dateString)
-      } else {
-        displayConfirmationView(nil)
-      }
+      
+      displayConfirmationView(dateString)
+    } else {
+      displayConfirmationView(nil)
     }
   }
   
@@ -208,5 +215,21 @@ class TippingViewController: UIViewController, UIViewControllerTransitioningDele
   
   func animationController(forDismissed dismissed: UIViewController) -> UIViewControllerAnimatedTransitioning? {
     return BasicAnimationController(delegate: tippingView, direction: .dismissing)
+  }
+  
+  func setObservers() {
+    ledgerObs.reconcileCompleted = { result, id, category, probi in
+      if id == self.publisherInfo.id, let value = BATValue(probi: probi) {
+        self.displayConfirmation(amount: value.doubleValue)
+      }
+    }
+    
+    ledgerObs.recurringTipAdded = { key in
+      if key == self.publisherInfo.id,
+        let selectedIndex = self.tippingView.optionSelectionView.selectedOptionIndex {
+        let amount = self.tippingView.optionSelectionView.options[selectedIndex].value.doubleValue
+        self.displayConfirmation(amount: amount)
+      }
+    }
   }
 }
